@@ -24,7 +24,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
 // Load all rooms
 function loadRooms() {
-    fetch('/api/rooms.php')
+    fetch('/hotel/api/rooms.php')
         .then(response => response.json())
         .then(data => {
             updateRoomStats(data);
@@ -102,7 +102,7 @@ function saveRoom() {
         notes: ''
     };
 
-    fetch('/api/rooms.php', {
+    fetch('/hotel/api/rooms.php', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json'
@@ -128,7 +128,7 @@ function saveRoom() {
 
 // Edit room
 function editRoom(roomId) {
-    fetch(`/api/rooms.php?id=${roomId}`)
+    fetch(`/hotel/api/rooms.php?id=${roomId}`)
         .then(response => response.json())
         .then(data => {
             const form = document.getElementById('editRoomForm');
@@ -157,7 +157,7 @@ function updateRoom() {
         notes: formData.get('notes') || ''
     };
 
-    fetch('/api/rooms.php', {
+    fetch('/hotel/api/rooms.php', {
         method: 'PUT',
         headers: {
             'Content-Type': 'application/json'
@@ -183,7 +183,7 @@ function updateRoom() {
 // Delete room
 function deleteRoom(roomId) {
     if(confirm('Are you sure you want to delete this room?')) {
-        fetch(`/api/rooms.php?id=${roomId}`, {
+        fetch(`/hotel/api/rooms.php?id=${roomId}`, {
             method: 'DELETE'
         })
         .then(response => response.json())
