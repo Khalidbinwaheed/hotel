@@ -4,102 +4,102 @@ require_once '../config/database.php';
 
 header('Content-Type: application/json');
 
-// Get database connection
-$db = getDBConnection();
-
-// Handle different HTTP methods
 $method = $_SERVER['REQUEST_METHOD'];
+$conn = Database::getConnection();
 
 switch($method) {
     case 'GET':
-        // Get single room or all rooms
-        if(isset($_GET['id'])) {
-            $stmt = $db->prepare("SELECT * FROM rooms WHERE id = ?");
-            $stmt->execute([$_GET['id']]);
-            $room = $stmt->fetch(PDO::FETCH_ASSOC);
-            echo json_encode($room);
+        if (isset($_GET['id'])) {
+            // Get single room
+            $id = (int)$_GET['id'];
+            $stmt = $conn->prepare("SELECT r.*, c.name as category_name, c.base_price 
+                                  FROM rooms r 
+                                  LEFT JOIN room_categories c ON r.category_id = c.id 
+                                  WHERE r.id = ?");
+            $stmt->bind_param("i", $id);
+            $stmt->execute();
+            $result = $stmt->get_result();
+            echo json_encode($result->fetch_assoc());
         } else {
-            $stmt = $db->query("SELECT * FROM rooms ORDER BY room_number");
-            $rooms = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            // Get all rooms
+            $sql = "SELECT r.*, c.name as category_name, c.base_price 
+                   FROM rooms r 
+                   LEFT JOIN room_categories c ON r.category_id = c.id 
+                   ORDER BY r.room_number";
+            $result = $conn->query($sql);
+            $rooms = [];
+            while ($row = $result->fetch_assoc()) {
+                $rooms[] = $row;
+            }
             echo json_encode($rooms);
         }
         break;
 
     case 'POST':
-        // Create new room
-        $data = $_POST;
+        $data = json_decode(file_get_contents('php://input'), true);
         
-        try {
-            $stmt = $db->prepare("
-                INSERT INTO rooms (room_number, type, floor, rate, status, amenities)
-                VALUES (?, ?, ?, ?, 'available', ?)
-            ");
-            
-            $amenities = isset($data['amenities']) ? json_encode($data['amenities']) : '[]';
-            
-            $stmt->execute([
-                $data['roomNumber'],
-                $data['roomType'],
-                $data['floor'],
-                $data['rate'],
-                $amenities
-            ]);
-            
-            echo json_encode(['success' => true, 'message' => 'Room created successfully']);
-        } catch(PDOException $e) {
-            http_response_code(500);
-            echo json_encode(['success' => false, 'message' => 'Error creating room: ' . $e->getMessage()]);
+        $room_number = $data['room_number'];
+        $category_id = $data['category_id'];
+        $floor = $data['floor'];
+        $status = $data['status'] ?? 'available';
+        $notes = $data['notes'] ?? '';
+
+        $stmt = $conn->prepare("INSERT INTO rooms (room_number, category_id, floor, status, notes) 
+                              VALUES (?, ?, ?, ?, ?)");
+        $stmt->bind_param("siiss", $room_number, $category_id, $floor, $status, $notes);
+        
+        if ($stmt->execute()) {
+            echo json_encode(['success' => true, 'id' => $conn->insert_id]);
+        } else {
+            echo json_encode(['success' => false, 'message' => $conn->error]);
         }
         break;
 
     case 'PUT':
-        // Update existing room
-        parse_str(file_get_contents("php://input"), $data);
+        $data = json_decode(file_get_contents('php://input'), true);
         
-        try {
-            $stmt = $db->prepare("
-                UPDATE rooms 
-                SET room_number = ?, type = ?, floor = ?, rate = ?, amenities = ?
-                WHERE id = ?
-            ");
-            
-            $amenities = isset($data['amenities']) ? json_encode($data['amenities']) : '[]';
-            
-            $stmt->execute([
-                $data['roomNumber'],
-                $data['roomType'],
-                $data['floor'],
-                $data['rate'],
-                $amenities,
-                $data['roomId']
-            ]);
-            
-            echo json_encode(['success' => true, 'message' => 'Room updated successfully']);
-        } catch(PDOException $e) {
-            http_response_code(500);
-            echo json_encode(['success' => false, 'message' => 'Error updating room: ' . $e->getMessage()]);
+        if (!isset($data['id'])) {
+            echo json_encode(['success' => false, 'message' => 'Room ID is required']);
+            break;
+        }
+
+        $id = $data['id'];
+        $room_number = $data['room_number'];
+        $category_id = $data['category_id'];
+        $floor = $data['floor'];
+        $status = $data['status'];
+        $notes = $data['notes'] ?? '';
+
+        $stmt = $conn->prepare("UPDATE rooms 
+                              SET room_number = ?, category_id = ?, floor = ?, status = ?, notes = ? 
+                              WHERE id = ?");
+        $stmt->bind_param("siissi", $room_number, $category_id, $floor, $status, $notes, $id);
+        
+        if ($stmt->execute()) {
+            echo json_encode(['success' => true]);
+        } else {
+            echo json_encode(['success' => false, 'message' => $conn->error]);
         }
         break;
 
     case 'DELETE':
-        // Delete room
-        if(isset($_GET['id'])) {
-            try {
-                $stmt = $db->prepare("DELETE FROM rooms WHERE id = ?");
-                $stmt->execute([$_GET['id']]);
-                echo json_encode(['success' => true, 'message' => 'Room deleted successfully']);
-            } catch(PDOException $e) {
-                http_response_code(500);
-                echo json_encode(['success' => false, 'message' => 'Error deleting room: ' . $e->getMessage()]);
-            }
-        } else {
-            http_response_code(400);
+        if (!isset($_GET['id'])) {
             echo json_encode(['success' => false, 'message' => 'Room ID is required']);
+            break;
+        }
+
+        $id = (int)$_GET['id'];
+        $stmt = $conn->prepare("DELETE FROM rooms WHERE id = ?");
+        $stmt->bind_param("i", $id);
+        
+        if ($stmt->execute()) {
+            echo json_encode(['success' => true]);
+        } else {
+            echo json_encode(['success' => false, 'message' => $conn->error]);
         }
         break;
 
     default:
-        http_response_code(405);
         echo json_encode(['success' => false, 'message' => 'Method not allowed']);
         break;
 } 
